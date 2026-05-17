@@ -112,6 +112,33 @@ then click 'Add to Cart' on the DigiKey site to convert.
 - **No price / stock check** — same reason; the script just builds the list, DigiKey does the rest.
 - **Endpoint stability** — `mylists/api/thirdparty` is the endpoint Digi-Key's own KiCad plugin uses, but it's not formally documented as a public API. If Digi-Key changes it, this script breaks. Watch for HTTP 404 / unexpected-response errors as a leading indicator.
 
+## Roadmap / future work
+
+### Authenticated direct-to-account mode (OAuth2)
+
+The current anonymous endpoint is convenient — zero setup, works on any machine — but the trade-off is that the returned short URL is link-shareable. Some users (particularly those handling commercially sensitive BOMs, or working under NDA / ITAR / export-controlled programmes) will reasonably prefer that their BOM never sits on a shareable URL, even briefly.
+
+A second mode is feasible via DigiKey's full Developer API:
+
+- **Endpoints**: `https://api.digikey.com/v1/oauth2/authorize` + `https://api.digikey.com/v1/oauth2/token` (production), or `sandbox-api.digikey.com` for testing.
+- **Flow**: 3-legged authorization code. One-time browser interaction to authorize the script against the user's DigiKey account; refresh token cached locally for indefinite headless reuse (DigiKey refresh tokens don't expire and are rotated on every refresh).
+- **Result**: list lands **directly** in the user's DigiKey account — no public short URL, no browser-claim step.
+
+Prerequisites (user-side, one-off per machine / account):
+
+1. Register an application at https://developer.digikey.com.
+2. Subscribe the app to the MyLists API product.
+3. Set a redirect URI (convention: `http://localhost:8139/digikey_callback` — matches the `digikey-api` PyPI package so other CubePilot tooling stays consistent).
+4. Note `client_id` + `client_secret`; pass to the script via env vars or local config file.
+
+Implementation sketch:
+
+- `--auth` flag (or auto-detect if credentials are present) selects authenticated mode; the existing anonymous endpoint remains the default for zero-setup use.
+- Credentials cached in `%APPDATA%\altium-push-to-digikey\credentials.json` (Windows) or `~/.config/altium-push-to-digikey/credentials.json` (POSIX), with restrictive file permissions where the OS supports them.
+- The authenticated CreateList endpoint shape on `api.digikey.com` is not in DigiKey's public docs — the Swagger / OpenAPI spec is gated behind login on the developer portal. Implementing this needs that spec or a verified example POST.
+
+Status: deferred. The current anonymous flow covers the zero-setup case well; the authenticated mode is queued for when (a) a customer or use-case demands it, and (b) the DigiKey developer-portal Swagger has been retrieved.
+
 ## Credits
 
 - API endpoint, payload schema, and short-URL response convention reverse-engineered from [Digi-Key/KiCad-Push-to-DigiKey](https://github.com/Digi-Key/KiCad-Push-to-DigiKey) (MIT licensed). Thanks to Digi-Key for keeping the API open and the source freely available.

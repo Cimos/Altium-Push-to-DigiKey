@@ -1,6 +1,6 @@
 [project]
 name = "altium-push-to-digikey"
-version = "0.1.0"
+version = "0.1.1"
 description = "Push an Altium-emitted BOM to a DigiKey myLists / cart via the public thirdparty endpoint."
 authors = [{name = "Madman"}]
 license = {text = "MIT"}
