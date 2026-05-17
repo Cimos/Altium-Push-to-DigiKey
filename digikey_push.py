@@ -218,6 +218,14 @@ def main():
         action="store_true",
         help="On success, open the returned short URL in the default browser.",
     )
+    ap.add_argument(
+        "--no-warn-shareable",
+        dest="warn_shareable",
+        action="store_false",
+        default=True,
+        help="Suppress the default warning that the returned URL is link-shareable "
+             "(anyone with the URL can view the list until claimed). Default: warn.",
+    )
     args = ap.parse_args()
 
     path_lower = args.bom.lower()
@@ -256,6 +264,17 @@ def main():
     print(f"\nSuccess. List URL:\n  {short_url}\n")
     print("Open the URL in a browser to land the list in your DigiKey myLists,")
     print("then click 'Add to Cart' on the DigiKey site to convert.")
+
+    if args.warn_shareable:
+        print(
+            "\n"
+            "  --- LINK-SHAREABLE WARNING ---\n"
+            "  The endpoint used is anonymous: anyone with the URL above can view\n"
+            "  (and import) this parts list until you claim it to your account by\n"
+            "  opening it in a logged-in browser session. Do NOT paste it into\n"
+            "  Slack, email, or any public channel if the BOM is sensitive.\n"
+            "  Pass --no-warn-shareable to suppress this notice.\n"
+        )
 
     if args.open_browser:
         webbrowser.open(short_url)

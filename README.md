@@ -64,6 +64,14 @@ python digikey_push.py path\to\bom.csv --open
 python digikey_push.py path\to\bom.csv --tags "cuberacer,prototype,batch-1"
 ```
 
+### Suppress the link-shareable warning (default: on)
+
+By default the script prints a warning after a successful push, reminding you that the returned short URL is link-shareable until you claim it. To suppress for CI / automation:
+
+```powershell
+python digikey_push.py path\to\bom.csv --no-warn-shareable
+```
+
 ## BOM column conventions
 
 For raw Altium CSV, the script auto-detects the column headers (case-insensitive) from these candidates:
