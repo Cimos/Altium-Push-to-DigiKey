@@ -1,0 +1,34 @@
+[project]
+name = "altium-push-to-digikey"
+version = "0.1.0"
+description = "Push an Altium-emitted BOM to a DigiKey myLists / cart via the public thirdparty endpoint."
+authors = [{name = "Madman"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = ["requests>=2.28"]
+keywords = ["altium", "digikey", "bom", "pcb", "ecad"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Manufacturing",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+
+[project.scripts]
+altium-push-to-digikey = "digikey_push:main"
+
+[project.urls]
+Homepage = "https://github.com/Cimos/Altium-Push-to-DigiKey"
+Issues = "https://github.com/Cimos/Altium-Push-to-DigiKey/issues"
+Reference = "https://github.com/Digi-Key/KiCad-Push-to-DigiKey"
+
+[tool.setuptools]
+py-modules = ["digikey_push"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"

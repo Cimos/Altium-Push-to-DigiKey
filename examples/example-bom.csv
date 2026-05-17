@@ -1,0 +1,5 @@
+Designator,Name,Manufacturer 1,Manufacturer Part Number 1,Supplier 1,Supplier Part Number 1,Quantity
+"R1, R2, R3","10k 0402 1%","Yageo","RC0402FR-0710KL","Digikey","311-10.0KLRCT-ND","3"
+"C1, C2","100nF 0402 X7R 16V","Murata","GRM155R71C104KA88D","Digikey","490-1320-1-ND","2"
+"U1","STM32H743VIT6","STMicroelectronics","STM32H743VIT6","Digikey","497-STM32H743VIT6-ND","1"
+"R4","0R 0402","Panasonic","ERJ-2GE0R00X","Digikey","P0.0JCT-ND","1"
