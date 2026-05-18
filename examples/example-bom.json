@@ -1,0 +1,49 @@
+{
+  "schema": "review-pack/bom@1",
+  "project": "example",
+  "rows": [
+    {
+      "ref_des": ["R1", "R2", "R3"],
+      "mpn": "RC0402FR-0710KL",
+      "manufacturer": "Yageo",
+      "value": "10k 0402 1%",
+      "quantity": 3,
+      "dnp": false,
+      "dkpn": "311-10.0KLRCT-ND"
+    },
+    {
+      "ref_des": ["C1", "C2"],
+      "mpn": "GRM155R71C104KA88D",
+      "manufacturer": "Murata",
+      "value": "100nF 0402 X7R 16V",
+      "quantity": 2,
+      "dnp": false,
+      "dkpn": "490-1320-1-ND"
+    },
+    {
+      "ref_des": ["U1"],
+      "mpn": "STM32H743VIT6",
+      "manufacturer": "STMicroelectronics",
+      "value": "",
+      "quantity": 1,
+      "dnp": false,
+      "dkpn": "497-STM32H743VIT6-ND"
+    },
+    {
+      "ref_des": ["R4"],
+      "mpn": "ERJ-2GE0R00X",
+      "manufacturer": "Panasonic",
+      "value": "0R 0402",
+      "quantity": 1,
+      "dnp": false
+    },
+    {
+      "ref_des": ["TP1"],
+      "mpn": "DO-NOT-POPULATE",
+      "manufacturer": "",
+      "value": "test point (DNP)",
+      "quantity": 1,
+      "dnp": true
+    }
+  ]
+}

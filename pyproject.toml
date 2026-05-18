@@ -1,7 +1,7 @@
 [project]
 name = "altium-push-to-digikey"
-version = "0.1.1"
-description = "Push an Altium-emitted BOM to a DigiKey myLists / cart via the public thirdparty endpoint."
+version = "0.2.0"
+description = "Push an Altium-emitted BOM to a DigiKey myLists / cart — anonymous link-shareable mode or OAuth2-authenticated direct-to-account mode."
 authors = [{name = "Madman"}]
 license = {text = "MIT"}
 readme = "README.md"
@@ -15,8 +15,15 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
 ]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+dev = ["pytest>=7", "ruff==0.6.9"]
 
 [project.scripts]
 altium-push-to-digikey = "digikey_push:main"
@@ -24,6 +31,7 @@ altium-push-to-digikey = "digikey_push:main"
 [project.urls]
 Homepage = "https://github.com/Cimos/Altium-Push-to-DigiKey"
 Issues = "https://github.com/Cimos/Altium-Push-to-DigiKey/issues"
+Changelog = "https://github.com/Cimos/Altium-Push-to-DigiKey/blob/main/CHANGELOG.md"
 Reference = "https://github.com/Digi-Key/KiCad-Push-to-DigiKey"
 
 [tool.setuptools]
@@ -32,3 +40,31 @@ py-modules = ["digikey_push"]
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+filterwarnings = [
+    "error",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+extend-exclude = ["build", "dist", ".venv", "venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+]
+ignore = [
+    "E501", # long lines — line-length is advisory in this project
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
