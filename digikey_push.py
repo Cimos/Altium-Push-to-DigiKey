@@ -344,6 +344,164 @@ def push(
 
 
 # ---------------------------------------------------------------------------
+# Authenticated push (OAuth2 / MyLists v1)
+# ---------------------------------------------------------------------------
+
+# Authenticated endpoint base. The DigiKey developer-portal-side MyLists v1
+# API is a different surface from the anonymous /mylists/api/thirdparty
+# endpoint used by push(): it requires a 3-legged-OAuth bearer token, splits
+# create-list and add-parts into two POSTs, and lands the result directly
+# in the authenticated user's myLists with no public short URL.
+#
+# Endpoint shape verified against a working Python implementation at
+# https://github.com/shun0211/zenn-articles/blob/main/articles/digikey-api-python.md
+# (referenced 2026-05-18).
+AUTH_API_BASE_PROD = "https://api.digikey.com"
+AUTH_API_BASE_SANDBOX = "https://sandbox-api.digikey.com"
+AUTH_LISTS_PATH = "/mylists/v1/lists"
+
+
+def _auth_api_base(environment: str) -> str:
+    return AUTH_API_BASE_SANDBOX if environment == "sandbox" else AUTH_API_BASE_PROD
+
+
+def _auth_headers(client_id: str, access_token: str) -> Dict[str, str]:
+    """Required header set for authenticated MyLists calls."""
+    return {
+        "Authorization": f"Bearer {access_token}",
+        "X-DIGIKEY-Client-Id": client_id,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+
+def build_auth_part_payload(items: Iterable[Dict], prefer: str = "mpn") -> List[Dict]:
+    """Build the array body for POST /mylists/v1/lists/{listId}/parts.
+
+    Schema (per the zenn-articles reference; see module docstring):
+        [ { "RequestedPartNumber": <MPN or DKPN>,
+            "OriginalPartNumber":  <same as RequestedPartNumber by default>,
+            "Quantities": [ {"Quantity": <int>} ],
+            "CustomerReference": <designators or empty>,
+            "Notes": <string or empty> }, ... ]
+    """
+    payload: List[Dict] = []
+    for it in items:
+        pn = pick_part_number(it, prefer)
+        payload.append(
+            {
+                "RequestedPartNumber": pn,
+                "OriginalPartNumber": pn,
+                "Quantities": [{"Quantity": int(it.get("qty") or 0)}],
+                "CustomerReference": it.get("refs") or "",
+                "Notes": "",
+            }
+        )
+    return payload
+
+
+def _extract_list_id(create_response_text: str) -> Optional[str]:
+    """Best-effort extract of the list id from CreateList's response body.
+
+    DigiKey's response shape is sparsely documented; the field has been
+    observed in the wild as a bare JSON string, as {"ListId": "..."}, or
+    as {"Id": "..."}. We accept all three; callers tag the result
+    `[unverified-on-target]` until exercised against live credentials.
+    """
+    try:
+        result = json.loads(create_response_text)
+    except ValueError:
+        return None
+    if isinstance(result, str):
+        return result.strip() or None
+    if isinstance(result, dict):
+        for key in ("ListId", "Id", "listId", "id"):
+            v = result.get(key)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    return None
+
+
+def push_authenticated(
+    items: Iterable[Dict],
+    list_name: str,
+    *,
+    access_token: str,
+    client_id: str,
+    environment: str = "production",
+    tags: Sequence[str] = (),
+    prefer: str = "mpn",
+    timeout: int = 30,
+    session: Optional[requests.Session] = None,
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """POST a BOM to the authenticated MyLists v1 API.
+
+    Two-step flow:
+        1. POST /mylists/v1/lists                  -> create empty list
+        2. POST /mylists/v1/lists/{listId}/parts   -> attach parts array
+
+    Returns (list_id, list_url, error). On success error is None; on failure
+    list_id / list_url may still be set if step 1 succeeded but step 2 didn't,
+    which lets the user salvage the empty list.
+
+    Note: `list_url` is a heuristic — DigiKey doesn't return a canonical web
+    URL from these endpoints. We synthesise the conventional
+    https://www.digikey.com/en/mylists/list/{list_id} form when we have an id.
+    """
+    items_list = list(items)
+    base = _auth_api_base(environment)
+    headers = _auth_headers(client_id, access_token)
+    poster = session.post if session is not None else requests.post
+
+    # Step 1: CreateList. Body uses PascalCase per the DigiKey forum example
+    # and the zenn-articles working impl.
+    create_body: Dict = {"ListName": list_name, "Source": "b2b"}
+    if tags:
+        create_body["Tags"] = list(tags)
+
+    create_url = base + AUTH_LISTS_PATH
+    log.debug("POST %s body=%r", create_url, create_body)
+    try:
+        resp = poster(create_url, json=create_body, headers=headers, timeout=timeout)
+    except requests.RequestException as e:
+        return None, None, f"network error on CreateList: {e}"
+    if resp.status_code not in (200, 201):
+        return None, None, (f"CreateList HTTP {resp.status_code}: {resp.text[:400]}")
+
+    list_id = _extract_list_id(resp.text)
+    if not list_id:
+        return (
+            None,
+            None,
+            (
+                f"CreateList succeeded ({resp.status_code}) but no list id was found "
+                f"in the response: {resp.text[:400]}"
+            ),
+        )
+
+    list_url = f"https://www.digikey.com/en/mylists/list/{list_id}"
+
+    # Step 2: AddPartsToListId.
+    parts_body = build_auth_part_payload(items_list, prefer=prefer)
+    parts_url = f"{base}{AUTH_LISTS_PATH}/{list_id}/parts"
+    log.debug("POST %s rows=%d", parts_url, len(parts_body))
+    try:
+        resp2 = poster(
+            parts_url,
+            json=parts_body,
+            headers=headers,
+            params={"index": "0"},
+            timeout=timeout,
+        )
+    except requests.RequestException as e:
+        return list_id, list_url, f"network error on AddPartsToListId: {e}"
+    if resp2.status_code not in (200, 201, 204):
+        return list_id, list_url, (f"AddPartsToListId HTTP {resp2.status_code}: {resp2.text[:400]}")
+
+    return list_id, list_url, None
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -431,6 +589,21 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "-v", "--verbose", action="store_true", help="Verbose logging (DEBUG level to stderr)."
     )
+    ap.add_argument(
+        "--auth",
+        action="store_true",
+        help="Authenticated direct-to-account mode: push to your DigiKey myLists via "
+        "OAuth2 instead of the anonymous link-shareable endpoint. Requires a one-time "
+        "`altium-digikey-auth login`. The list lands directly under your account, no "
+        "public URL is generated.",
+    )
+    ap.add_argument(
+        "--auth-environment",
+        choices=["production", "sandbox"],
+        default=None,
+        help="Override the OAuth environment for this run (default: from saved "
+        "credentials, or `production`). Only meaningful with --auth.",
+    )
     ap.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return ap
 
@@ -478,8 +651,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.dry_run:
         print("\n--- DRY RUN (no HTTP POST) ---")
-        print(json.dumps(build_payload(items, prefer=args.prefer), indent=2))
+        if args.auth:
+            print(f"# Endpoint: {AUTH_API_BASE_PROD}{AUTH_LISTS_PATH} (CreateList)")
+            print("# CreateList body:")
+            create_body = {"ListName": list_name, "Source": "b2b"}
+            if args.tags:
+                create_body["Tags"] = [t.strip() for t in args.tags.split(",") if t.strip()]
+            print(json.dumps(create_body, indent=2))
+            print("\n# AddPartsToListId body (POST /lists/{listId}/parts?index=0):")
+            print(json.dumps(build_auth_part_payload(items, prefer=args.prefer), indent=2))
+        else:
+            print(json.dumps(build_payload(items, prefer=args.prefer), indent=2))
         return 0
+
+    if args.auth:
+        return _run_auth_mode(args, items, list_name)
 
     print(f"\nPOSTing to {API_URL} ...")
     short_url, err = push(items, list_name, args.tags, timeout=args.timeout, prefer=args.prefer)
@@ -503,11 +689,76 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "  (and import) this parts list until you claim it to your account by\n"
             "  opening it in a logged-in browser session. Do NOT paste it into\n"
             "  Slack, email, or any public channel if the BOM is sensitive.\n"
-            "  Pass --no-warn-shareable to suppress this notice.\n"
+            "  Pass --no-warn-shareable to suppress this notice. For private push\n"
+            "  directly to your DigiKey account, use --auth.\n"
         )
 
     if args.open_browser:
         webbrowser.open(short_url)
+
+    return 0
+
+
+def _run_auth_mode(args, items: List[Dict], list_name: str) -> int:
+    """Authenticated direct-to-account mode (OAuth2 / MyLists v1)."""
+    try:
+        import digikey_oauth as oauth
+    except ImportError as e:
+        sys.exit(f"ERROR: --auth requires digikey_oauth.py alongside digikey_push.py ({e}).")
+
+    try:
+        # Honor a per-call environment override; otherwise load the saved env.
+        if args.auth_environment:
+            cfg = oauth.load_config()
+            cfg = oauth.OAuthConfig(
+                client_id=cfg.client_id,
+                client_secret=cfg.client_secret,
+                redirect_uri=cfg.redirect_uri,
+                environment=args.auth_environment,
+            )
+            access_token, cfg, _tokens = oauth.get_valid_access_token(
+                config=cfg, timeout=args.timeout
+            )
+        else:
+            access_token, cfg, _tokens = oauth.get_valid_access_token(timeout=args.timeout)
+    except oauth.DigiKeyOAuthError as e:
+        sys.exit(f"ERROR: {e}")
+
+    tags = [t.strip() for t in (args.tags or "").split(",") if t.strip()]
+    print(
+        f"\nPOSTing to {_auth_api_base(cfg.environment)}{AUTH_LISTS_PATH} (authenticated, {cfg.environment}) ..."
+    )
+    list_id, list_url, err = push_authenticated(
+        items,
+        list_name,
+        access_token=access_token,
+        client_id=cfg.client_id,
+        environment=cfg.environment,
+        tags=tags,
+        prefer=args.prefer,
+        timeout=args.timeout,
+    )
+    if err:
+        if list_id:
+            print(f"\nPartial success: empty list '{list_id}' created but parts step failed.")
+            print(f"  List URL (heuristic): {list_url}")
+        sys.exit(f"ERROR: {err}")
+
+    print("\nSuccess. List landed directly in your DigiKey account.")
+    print(f"  ListId: {list_id}")
+    print(f"  URL (heuristic): {list_url}")
+    print(
+        "\n  This list is NOT link-shareable — it's bound to your authenticated\n"
+        "  account. Convert to a cart from your DigiKey myLists page."
+    )
+
+    if args.out and list_url:
+        with open(args.out, "w", encoding="utf-8") as f:
+            f.write(list_url + "\n")
+        print(f"\nWrote URL to {args.out}")
+
+    if args.open_browser and list_url:
+        webbrowser.open(list_url)
 
     return 0
 

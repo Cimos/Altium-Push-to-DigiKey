@@ -36,6 +36,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `altium/README.md` — BOM Output Job column setup, supported header variants,
   and the rationale for not shipping a DelphiScript wrapper today.
 - `examples/example-bom.json` — review-pack-shaped sample input.
+- **`--auth` mode (authenticated direct-to-account push) — `[unverified-on-target]`.**
+  New module `digikey_oauth.py` implements the 3-legged OAuth2 authorization-code
+  flow against `api.digikey.com` (production) and `sandbox-api.digikey.com`
+  (sandbox). New companion CLI `altium-digikey-auth` (subcommands: `setup`,
+  `login`, `logout`, `status`, `refresh`) manages the credential lifecycle.
+  Tokens persist atomically under `%APPDATA%\altium-push-to-digikey\` (Windows)
+  or `$XDG_CONFIG_HOME/altium-push-to-digikey/` (POSIX) with `0600` permissions
+  where the OS allows. Refresh-token rotation is automatic. The authenticated
+  CreateList + AddPartsToListId call sequence in `digikey_push.push_authenticated`
+  is reconstructed from a community Python reference; the wire shape has NOT
+  yet been confirmed against a live DigiKey account, so this surface ships as
+  `[unverified-on-target]`. Anonymous mode (no `--auth` flag) remains the
+  default and is unaffected.
 
 ### Changed
 - Quantity parsing is now tolerant of `"3 pcs"`, `"3.0"`, leading/trailing

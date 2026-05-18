@@ -438,3 +438,247 @@ def test_cli_no_parseable_rows(tmp_path):
     p = write(tmp_path, "bom.csv", "Designator,Manufacturer Part Number 1,Quantity\nR1,,0\n")
     with pytest.raises(SystemExit):
         dp.main([str(p), "--dry-run"])
+
+
+# ---------------------------------------------------------------------------
+# Authenticated MyLists v1 path: build_auth_part_payload + push_authenticated
+# ---------------------------------------------------------------------------
+
+
+def test_build_auth_part_payload_shape():
+    items = [
+        {"mpn": "PN-A", "qty": 3, "refs": "R1, R2", "dkpn": ""},
+        {"mpn": "PN-B", "qty": 1, "refs": "C1", "dkpn": "DK-B"},
+    ]
+    payload = dp.build_auth_part_payload(items, prefer="mpn")
+    assert payload == [
+        {
+            "RequestedPartNumber": "PN-A",
+            "OriginalPartNumber": "PN-A",
+            "Quantities": [{"Quantity": 3}],
+            "CustomerReference": "R1, R2",
+            "Notes": "",
+        },
+        {
+            "RequestedPartNumber": "PN-B",
+            "OriginalPartNumber": "PN-B",
+            "Quantities": [{"Quantity": 1}],
+            "CustomerReference": "C1",
+            "Notes": "",
+        },
+    ]
+
+
+def test_build_auth_part_payload_prefer_dkpn_falls_back_to_mpn():
+    items = [
+        {"mpn": "PN-A", "qty": 1, "refs": "", "dkpn": "DK-A"},
+        {"mpn": "PN-B", "qty": 1, "refs": "", "dkpn": ""},
+    ]
+    payload = dp.build_auth_part_payload(items, prefer="dkpn")
+    assert payload[0]["RequestedPartNumber"] == "DK-A"
+    assert payload[1]["RequestedPartNumber"] == "PN-B"
+
+
+def test_push_authenticated_two_step_success():
+    items = [{"mpn": "PN-A", "qty": 3, "refs": "R1", "dkpn": ""}]
+    posts = [
+        FakeResponse(200, json.dumps("LISTID-123")),
+        FakeResponse(200, json.dumps({"PartsAdded": 1})),
+    ]
+    with mock.patch.object(dp.requests, "post", side_effect=lambda *a, **kw: posts.pop(0)):
+        list_id, list_url, err = dp.push_authenticated(
+            items,
+            "my-list",
+            access_token="ACCESS",
+            client_id="cid",
+            environment="production",
+            tags=["alpha"],
+            prefer="mpn",
+        )
+    assert err is None
+    assert list_id == "LISTID-123"
+    assert list_url == "https://www.digikey.com/en/mylists/list/LISTID-123"
+
+
+def test_push_authenticated_accepts_dict_list_id_response():
+    items = [{"mpn": "PN-A", "qty": 1, "refs": "", "dkpn": ""}]
+    posts = [
+        FakeResponse(200, json.dumps({"ListId": "DICT-456"})),
+        FakeResponse(204, ""),
+    ]
+    with mock.patch.object(dp.requests, "post", side_effect=lambda *a, **kw: posts.pop(0)):
+        list_id, _list_url, err = dp.push_authenticated(
+            items,
+            "ln",
+            access_token="A",
+            client_id="cid",
+        )
+    assert err is None
+    assert list_id == "DICT-456"
+
+
+def test_push_authenticated_create_list_http_error():
+    items = [{"mpn": "PN-A", "qty": 1, "refs": "", "dkpn": ""}]
+    with mock.patch.object(dp.requests, "post", return_value=FakeResponse(401, "unauthorized")):
+        list_id, list_url, err = dp.push_authenticated(
+            items,
+            "ln",
+            access_token="A",
+            client_id="cid",
+        )
+    assert list_id is None
+    assert list_url is None
+    assert "CreateList HTTP 401" in err
+
+
+def test_push_authenticated_create_list_no_id_in_response():
+    items = [{"mpn": "PN-A", "qty": 1, "refs": "", "dkpn": ""}]
+    with mock.patch.object(
+        dp.requests, "post", return_value=FakeResponse(200, json.dumps({"foo": "bar"}))
+    ):
+        list_id, _list_url, err = dp.push_authenticated(
+            items,
+            "ln",
+            access_token="A",
+            client_id="cid",
+        )
+    assert list_id is None
+    assert "no list id" in err.lower()
+
+
+def test_push_authenticated_add_parts_fails_returns_partial():
+    """CreateList ok, AddParts fails — return list_id so user can salvage the empty list."""
+    items = [{"mpn": "PN-A", "qty": 1, "refs": "", "dkpn": ""}]
+    posts = [
+        FakeResponse(200, json.dumps("PARTIAL-789")),
+        FakeResponse(500, "boom"),
+    ]
+    with mock.patch.object(dp.requests, "post", side_effect=lambda *a, **kw: posts.pop(0)):
+        list_id, list_url, err = dp.push_authenticated(
+            items,
+            "ln",
+            access_token="A",
+            client_id="cid",
+        )
+    assert list_id == "PARTIAL-789"
+    assert list_url == "https://www.digikey.com/en/mylists/list/PARTIAL-789"
+    assert "AddPartsToListId HTTP 500" in err
+
+
+def test_push_authenticated_sandbox_routes_to_sandbox():
+    items = [{"mpn": "PN-A", "qty": 1, "refs": "", "dkpn": ""}]
+    posts = [FakeResponse(200, json.dumps("SBX-1")), FakeResponse(204, "")]
+    seen_urls = []
+
+    def fake_post(url, **kwargs):
+        seen_urls.append(url)
+        return posts.pop(0)
+
+    with mock.patch.object(dp.requests, "post", side_effect=fake_post):
+        _, _, err = dp.push_authenticated(
+            items,
+            "ln",
+            access_token="A",
+            client_id="cid",
+            environment="sandbox",
+        )
+    assert err is None
+    assert all(u.startswith("https://sandbox-api.digikey.com") for u in seen_urls)
+
+
+def test_push_authenticated_sends_required_auth_headers():
+    items = [{"mpn": "PN-A", "qty": 1, "refs": "", "dkpn": ""}]
+    posts = [FakeResponse(200, json.dumps("X")), FakeResponse(204, "")]
+    seen_headers = []
+
+    def fake_post(url, **kwargs):
+        seen_headers.append(kwargs.get("headers", {}))
+        return posts.pop(0)
+
+    with mock.patch.object(dp.requests, "post", side_effect=fake_post):
+        dp.push_authenticated(items, "ln", access_token="THE-TOKEN", client_id="THE-CID")
+    assert len(seen_headers) == 2
+    for h in seen_headers:
+        assert h["Authorization"] == "Bearer THE-TOKEN"
+        assert h["X-DIGIKEY-Client-Id"] == "THE-CID"
+        assert h["Content-Type"] == "application/json"
+
+
+def test_push_authenticated_create_list_body_includes_tags():
+    items = [{"mpn": "PN-A", "qty": 1, "refs": "", "dkpn": ""}]
+    posts = [FakeResponse(200, json.dumps("X")), FakeResponse(204, "")]
+    seen_bodies = []
+
+    def fake_post(url, **kwargs):
+        seen_bodies.append(kwargs.get("json"))
+        return posts.pop(0)
+
+    with mock.patch.object(dp.requests, "post", side_effect=fake_post):
+        dp.push_authenticated(
+            items,
+            "my-list",
+            access_token="A",
+            client_id="cid",
+            tags=["alpha", "beta"],
+        )
+    # First call is CreateList — should carry ListName, Source, Tags.
+    create_body = seen_bodies[0]
+    assert create_body["ListName"] == "my-list"
+    assert create_body["Source"] == "b2b"
+    assert create_body["Tags"] == ["alpha", "beta"]
+    # Second call is AddPartsToListId — should carry the parts array.
+    parts_body = seen_bodies[1]
+    assert isinstance(parts_body, list)
+    assert parts_body[0]["RequestedPartNumber"] == "PN-A"
+
+
+def test_push_authenticated_add_parts_url_includes_index_param():
+    items = [{"mpn": "PN-A", "qty": 1, "refs": "", "dkpn": ""}]
+    posts = [FakeResponse(200, json.dumps("LID")), FakeResponse(204, "")]
+    seen = []
+
+    def fake_post(url, **kwargs):
+        seen.append((url, kwargs.get("params")))
+        return posts.pop(0)
+
+    with mock.patch.object(dp.requests, "post", side_effect=fake_post):
+        dp.push_authenticated(items, "ln", access_token="A", client_id="cid")
+    # AddPartsToListId is the second POST.
+    parts_url, parts_params = seen[1]
+    assert parts_url.endswith("/mylists/v1/lists/LID/parts")
+    assert parts_params == {"index": "0"}
+
+
+# ---------------------------------------------------------------------------
+# CLI integration: --auth --dry-run prints the auth-shape payload
+# ---------------------------------------------------------------------------
+
+
+def test_cli_auth_dry_run_prints_auth_payload(tmp_path, capsys):
+    p = write(tmp_path, "bom.csv", "Designator,Manufacturer Part Number 1,Quantity\nR1,PN-A,3\n")
+    rc = dp.main([str(p), "--auth", "--dry-run", "--list-name", "ln", "--tags", "a,b"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "CreateList" in out
+    assert "AddPartsToListId" in out
+    assert "ListName" in out
+    assert "RequestedPartNumber" in out
+    # b2b source marker confirms the auth body shape, not the anonymous shape.
+    assert '"Source": "b2b"' in out
+    # Tags split into a list.
+    assert '"a"' in out and '"b"' in out
+
+
+def test_cli_auth_mode_no_credentials_exits_with_setup_hint(tmp_path, monkeypatch):
+    """Without client_id/secret available, --auth (non-dry-run) exits and
+    points the user at `altium-digikey-auth`."""
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    for k in ("DIGIKEY_CLIENT_ID", "DIGIKEY_CLIENT_SECRET"):
+        monkeypatch.delenv(k, raising=False)
+
+    p = write(tmp_path, "bom.csv", "Designator,Manufacturer Part Number 1,Quantity\nR1,PN-A,3\n")
+    with pytest.raises(SystemExit) as ei:
+        dp.main([str(p), "--auth", "--list-name", "ln"])
+    msg = str(ei.value)
+    assert "altium-digikey-auth" in msg or "DIGIKEY_CLIENT_ID" in msg

@@ -27,6 +27,7 @@ dev = ["pytest>=7", "ruff==0.6.9"]
 
 [project.scripts]
 altium-push-to-digikey = "digikey_push:main"
+altium-digikey-auth = "digikey_auth_cli:main"
 
 [project.urls]
 Homepage = "https://github.com/Cimos/Altium-Push-to-DigiKey"
@@ -35,7 +36,7 @@ Changelog = "https://github.com/Cimos/Altium-Push-to-DigiKey/blob/main/CHANGELOG
 Reference = "https://github.com/Digi-Key/KiCad-Push-to-DigiKey"
 
 [tool.setuptools]
-py-modules = ["digikey_push"]
+py-modules = ["digikey_push", "digikey_oauth", "digikey_auth_cli"]
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -63,7 +64,10 @@ select = [
     "UP",   # pyupgrade
 ]
 ignore = [
-    "E501", # long lines — line-length is advisory in this project
+    "E501",  # long lines — line-length is advisory in this project
+    "UP006", # keep typing.Dict / typing.List etc. — PEP-484 form, py3.8-compatible at runtime
+    "UP007", # keep Optional[X] over X | None for py3.8 readability
+    "UP035", # `typing.X` is deprecated in py3.9+ — we still target 3.8
 ]
 
 [tool.ruff.lint.per-file-ignores]
