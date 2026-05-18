@@ -312,9 +312,12 @@ def test_exchange_code_for_tokens_success():
     assert tokens.refresh_token == "RT"
     assert tokens.expires_at > time.time() + 1000
     assert tokens.refresh_token_expires_at is not None
-    assert m.call_args.kwargs["data"]["grant_type"] == "authorization_code"
-    assert m.call_args.kwargs["data"]["code"] == "CODE"
-    assert m.call_args.kwargs["data"]["client_id"] == "CID"
+    body = m.call_args.kwargs["data"]
+    assert body["grant_type"] == "authorization_code"
+    assert body["code"] == "CODE"
+    assert body["client_id"] == "CID"
+    assert body["client_secret"] == "SEC"
+    assert body["redirect_uri"] == do.DEFAULT_REDIRECT_URI
 
 
 def test_exchange_code_for_tokens_http_error_raises():

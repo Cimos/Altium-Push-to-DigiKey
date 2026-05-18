@@ -90,10 +90,15 @@ def test_build_auth_part_payload_prefer_dkpn():
         ('{"Id": "abc-123"}', "abc-123"),
         ('{"listId": "abc-123"}', "abc-123"),
         ('{"id": "abc-123"}', "abc-123"),
+        ('{"ListId": 12345}', "12345"),  # integer id, coerced to string
+        ('{"id": 42}', "42"),
         ('{"ListName": "x"}', None),  # no id field
         ("not-json", None),
         ('""', None),
         ('{"ListId": ""}', None),
+        # Shapes we explicitly do NOT support yet — documented as gaps:
+        ('[{"Id": "abc-123"}]', None),  # array wrapper
+        ('{"data": {"id": "abc-123"}}', None),  # nested under data
     ],
 )
 def test_extract_list_id_variants(body, expected):
@@ -302,3 +307,45 @@ def test_cli_auth_mode_exits_on_oauth_error(tmp_path):
         with pytest.raises(SystemExit) as ei:
             dp.main([str(p), "--auth"])
     assert "no cached tokens" in str(ei.value)
+
+
+def test_cli_auth_environment_override_constructs_overridden_config(tmp_path):
+    """--auth-environment sandbox should override the saved-config environment for the run."""
+    csv_text = "Designator,Manufacturer Part Number 1,Quantity\nR1,PN-A,1\n"
+    p = tmp_path / "bom.csv"
+    p.write_text(csv_text, encoding="utf-8")
+
+    import digikey_oauth as do_mod
+
+    # Saved config is production; the override should produce a sandbox cfg.
+    saved_cfg = do_mod.OAuthConfig(client_id="CID", client_secret="SEC", environment="production")
+    fake_tokens = do_mod.TokenSet(access_token="AT", refresh_token="RT", expires_at=99999999999.0)
+
+    captured_cfgs = []
+
+    def fake_load_config(*args, **kwargs):
+        return saved_cfg
+
+    def fake_get_valid(*args, **kwargs):
+        # _run_auth_mode passes `config=<overridden cfg>` when --auth-environment is set.
+        captured_cfgs.append(kwargs.get("config"))
+        return ("AT", kwargs.get("config"), fake_tokens)
+
+    with mock.patch.object(do_mod, "load_config", side_effect=fake_load_config), mock.patch.object(
+        do_mod, "get_valid_access_token", side_effect=fake_get_valid
+    ), mock.patch.object(
+        dp,
+        "push_authenticated",
+        return_value=("list-X", "https://www.digikey.com/en/mylists/list/list-X", None),
+    ) as pa:
+        rc = dp.main([str(p), "--auth", "--auth-environment", "sandbox"])
+    assert rc == 0
+    # The override branch built a fresh OAuthConfig with environment=sandbox
+    # and passed it as kw `config` to get_valid_access_token.
+    assert len(captured_cfgs) == 1
+    overridden = captured_cfgs[0]
+    assert overridden is not None
+    assert overridden.environment == "sandbox"
+    assert overridden.client_id == "CID"
+    # push_authenticated should be called with environment="sandbox" downstream.
+    assert pa.call_args.kwargs["environment"] == "sandbox"

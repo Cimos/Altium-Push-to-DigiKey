@@ -24,3 +24,14 @@ Thumbs.db
 
 # Local Altium-Scripts internal docs (not for public repos)
 .claude/
+
+# DigiKey OAuth secrets — defence against an accidental cwd-rooted run
+# placing credentials in the repo tree. The default storage path is
+# %APPDATA%\altium-push-to-digikey\ (Windows) or $XDG_CONFIG_HOME/altium-push-to-digikey/
+# (POSIX); these patterns catch the misconfigured case where a user passes
+# config_dir=. and runs from the repo root.
+credentials.json
+tokens.json
+
+# Local audit artefacts (auditor reports, ad-hoc notes) — not for public repos
+docs/audits/

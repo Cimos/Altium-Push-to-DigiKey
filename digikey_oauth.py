@@ -34,7 +34,8 @@ fail to connect (nothing's listening there) but the address bar still
 shows the full URL including the code. The user copy-pastes that URL back
 to the CLI. Robust, dependency-free, well-known OAuth-for-CLI pattern.
 
-This module is intentionally `requests`-only (no extra deps).
+This module adds no dependencies beyond `requests`, which is already required
+by the rest of the package.
 """
 
 from __future__ import annotations

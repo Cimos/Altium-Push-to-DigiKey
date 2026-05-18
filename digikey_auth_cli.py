@@ -36,7 +36,19 @@ def _cmd_setup(args: argparse.Namespace) -> int:
     cid = args.client_id or input("DigiKey client_id: ").strip()
     if not cid:
         sys.exit("ERROR: client_id is required.")
-    csec = args.client_secret or getpass.getpass("DigiKey client_secret (hidden): ").strip()
+    if args.client_secret:
+        # The user passed the secret on the command line — already in shell
+        # history. Warn but proceed.
+        print(
+            "WARNING: --client-secret was passed on the command line. The value is now "
+            "in your shell history and the OS process listing. Consider rotating the "
+            "secret in the DigiKey developer portal and re-running `setup` without the "
+            "flag (it will prompt for the secret with hidden input).",
+            file=sys.stderr,
+        )
+        csec = args.client_secret
+    else:
+        csec = getpass.getpass("DigiKey client_secret (hidden): ").strip()
     if not csec:
         sys.exit("ERROR: client_secret is required.")
     ruri = args.redirect_uri or oauth.DEFAULT_REDIRECT_URI
@@ -151,7 +163,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
     setup = sub.add_parser("setup", help="Write client_id/client_secret to local config.")
     setup.add_argument("--client-id", default=None, help="(else prompted)")
-    setup.add_argument("--client-secret", default=None, help="(else prompted, hidden)")
+    setup.add_argument(
+        "--client-secret",
+        default=None,
+        help="DigiKey client secret. WARNING: passing the secret on the command line "
+        "puts it in your shell history and the OS process listing. Prefer omitting this "
+        "flag — `setup` will then prompt for the secret with hidden input via getpass.",
+    )
     setup.add_argument(
         "--redirect-uri",
         default=None,

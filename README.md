@@ -131,11 +131,16 @@ One-time setup (per machine + account):
 1. Register an app at https://developer.digikey.com.
 2. Subscribe the app to the MyLists API product.
 3. Set the OAuth redirect URI to `https://localhost` (no listener needed — see below).
-4. Configure local credentials:
+4. Configure local credentials. **Don't pass the secret on the command line** — it would land in shell history and the OS process listing. Run setup interactively so the secret is read with hidden input via `getpass`:
     ```powershell
-    altium-digikey-auth setup --client-id <CID> --client-secret <SEC>
+    altium-digikey-auth setup --client-id <CID>
+    # ... prompts for client_secret with hidden input
     ```
-    or set `DIGIKEY_CLIENT_ID` / `DIGIKEY_CLIENT_SECRET` env vars.
+    For CI / automation, prefer the env-var form (set in the runner's secret store, not in scripts):
+    ```powershell
+    $env:DIGIKEY_CLIENT_ID = "<CID>"
+    $env:DIGIKEY_CLIENT_SECRET = "<SEC>"
+    ```
 5. Authorize the app:
     ```powershell
     altium-digikey-auth login

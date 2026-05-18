@@ -18,7 +18,7 @@ API surface discovered from:
     https://github.com/Digi-Key/KiCad-Push-to-DigiKey (MIT licensed)
 
 Input formats:
-    1. review-pack `bom.json` -- preferred; canonical normalised form emitted by
+    1. review-pack `bom.json` -- preferred; normalised form emitted by
        Altium-emit-review-pack scripts and CubePilot production-agents pipeline.
        Schema: { "rows": [ { "mpn": str, "quantity": int, "ref_des": [str, ...],
                               "dnp": bool, "dkpn": str (optional), ... }, ... ] }
@@ -353,9 +353,13 @@ def push(
 # create-list and add-parts into two POSTs, and lands the result directly
 # in the authenticated user's myLists with no public short URL.
 #
-# Endpoint shape verified against a working Python implementation at
+# Endpoint shape cross-referenced (NOT yet bench-verified) against a community
+# Python implementation at
 # https://github.com/shun0211/zenn-articles/blob/main/articles/digikey-api-python.md
-# (referenced 2026-05-18).
+# (referenced 2026-05-18). [unverified-on-target] — see README and CHANGELOG.
+# The first successful `--auth` push against a live DigiKey account is the
+# verification step. If response shape differs from what _extract_list_id
+# tolerates, patch here and remove this caveat.
 AUTH_API_BASE_PROD = "https://api.digikey.com"
 AUTH_API_BASE_SANDBOX = "https://sandbox-api.digikey.com"
 AUTH_LISTS_PATH = "/mylists/v1/lists"
@@ -404,9 +408,10 @@ def _extract_list_id(create_response_text: str) -> Optional[str]:
     """Best-effort extract of the list id from CreateList's response body.
 
     DigiKey's response shape is sparsely documented; the field has been
-    observed in the wild as a bare JSON string, as {"ListId": "..."}, or
-    as {"Id": "..."}. We accept all three; callers tag the result
-    `[unverified-on-target]` until exercised against live credentials.
+    observed in community references as a bare JSON string, as
+    {"ListId": "..."}, or as {"Id": "..."}. We accept all three plus
+    lowercase variants and integer ids (coerced to str). Callers tag the
+    result `[unverified-on-target]` until exercised against live credentials.
     """
     try:
         result = json.loads(create_response_text)
@@ -419,6 +424,8 @@ def _extract_list_id(create_response_text: str) -> Optional[str]:
             v = result.get(key)
             if isinstance(v, str) and v.strip():
                 return v.strip()
+            if isinstance(v, int):
+                return str(v)
     return None
 
 

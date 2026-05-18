@@ -56,6 +56,46 @@ def test_setup_requires_client_id_via_prompt(monkeypatch):
         auth_cli.main(["setup", "--client-secret", "SEC"])
 
 
+def test_setup_warns_when_secret_passed_on_command_line(tmp_path, capsys, monkeypatch):
+    """Passing --client-secret on the CLI leaks to shell history; warn on stderr."""
+    monkeypatch.setattr(oauth, "default_config_dir", lambda: tmp_path)
+    rc = auth_cli.main(
+        [
+            "setup",
+            "--client-id",
+            "CID",
+            "--client-secret",
+            "SEC",
+            "--environment",
+            "production",
+        ]
+    )
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "WARNING" in err
+    assert "shell history" in err
+
+
+def test_setup_no_warning_when_secret_prompted(tmp_path, capsys, monkeypatch):
+    """When --client-secret is omitted, getpass is used and no shell-history warning fires."""
+    monkeypatch.setattr(oauth, "default_config_dir", lambda: tmp_path)
+    monkeypatch.setattr("getpass.getpass", lambda *_a, **_k: "SEC-from-getpass")
+    rc = auth_cli.main(
+        [
+            "setup",
+            "--client-id",
+            "CID",
+            "--environment",
+            "production",
+        ]
+    )
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "WARNING" not in captured.err
+    loaded = oauth.load_config(config_dir=tmp_path)
+    assert loaded.client_secret == "SEC-from-getpass"
+
+
 # ---------------------------------------------------------------------------
 # login
 # ---------------------------------------------------------------------------
