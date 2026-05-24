@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.2.0] - unreleased
 
 ### Added
+- `altium/push-bom-to-digikey.pas` + `altium/push-bom-to-digikey.PrjScr` —
+  DelphiScript emitter for Altium Designer 26. One click from the Scripts panel
+  (`EmitDigiKeyBOM` procedure) walks the focused project's flattened document,
+  aggregates by MPN, filters DNP / No-BOM components, and writes
+  `<project-dir>\digikey-push.csv`. Eliminates the OutJob absolute-path-drift
+  problem (every dev re-links output containers after cloning). The emitter is `[shipped-not-verified]`
+  pending a bench run of the companion probe (`push-bom-to-digikey-probe.pas`)
+  against AD26; the `DM_DocumentFlattened` / `DM_Components` / parameter API
+  surface is `[pattern]` from the CubeResearch IBOM script, not
+  `[verified-on-AD26]`. See `altium/README.md` for probe instructions.
 - `--scale N` flag — multiply every row's quantity by `N`, useful for pushing
   enough parts for an `N`-board build.
 - `--prefer mpn|dkpn` flag — select whether to send the MPN (default, matches

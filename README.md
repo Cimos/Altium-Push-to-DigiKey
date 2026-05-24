@@ -34,6 +34,21 @@ After install, the command `altium-push-to-digikey` is on your PATH.
 
 ## Usage
 
+### From inside Altium (recommended — no OutJob required)
+
+Open the project in Altium, then run the `EmitDigiKeyBOM` procedure from
+the Scripts panel:
+
+1. `File > Scripts > Open Script Project...` → `altium\push-bom-to-digikey.PrjScr`
+2. Make the `.PrjPcb` the focused project.
+3. In the Scripts panel right-click `EmitDigiKeyBOM` → **Run**.
+
+The script writes `<project-dir>\digikey-push.csv` and shows the exact
+`altium-push-to-digikey` command to run next.
+
+See [altium/README.md](altium/README.md) for setup details and the probe
+file that verifies API availability on your AD26 install.
+
 ### From a review-pack `bom.json`
 
 ```powershell

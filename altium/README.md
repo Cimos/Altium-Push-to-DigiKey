@@ -1,5 +1,31 @@
 # Altium-side setup
 
+## Recommended path: DelphiScript emitter (one click)
+
+`push-bom-to-digikey.pas` extracts the BOM directly from the focused Altium
+project and writes `<project-dir>\digikey-push.csv` in a single step from the
+Scripts panel. No OutJob needed, no absolute-path drift, no Generate Outputs
+step.
+
+**Setup:**
+1. In Altium: `File > Scripts > Open Script Project...` > browse to
+   `altium\push-bom-to-digikey.PrjScr` in this repo.
+2. Open the `.PrjPcb` you want to emit and make it the focused project.
+3. In the Scripts panel (`View > Panels > Scripts`) right-click
+   `EmitDigiKeyBOM` and click **Run**.
+4. A dialog reports the output path and the exact `altium-push-to-digikey`
+   command to run.
+
+**First run:** the script calls `WorkspaceManager:Compile` automatically if
+the flattened document is nil. On subsequent runs the already-compiled project
+state is reused.
+
+**Probe file:** `push-bom-to-digikey-probe.pas` is a 10-line diagnostic that
+tests each API symbol before relying on it. Run it once on a new AD26 install
+to confirm the symbols exist. See the probe file header for instructions.
+
+## Manual path (fallback): OutJob + CSV
+
 This script consumes either:
 
 1. A normalised `bom.json` from a CubePilot review-pack pipeline, **or**
@@ -65,16 +91,10 @@ normally pass to the script after `-Bom`:
 .\altium\push-bom-to-digikey.ps1 -Bom .\review-pack\bom.json -Tags "cuberacer,prototype"
 ```
 
-## Why no `.pas` (DelphiScript) wrapper here
+## Why the `.pas` emitter is preferred over the OutJob path
 
-A DelphiScript wrapper that walks the active project's schematics and emits a
-CSV directly is appealing in principle, but the Altium API surface for
-component iteration (`SchServer` + `IProject` + `DM_PhysicalDocuments` +
-schematic component enumeration with variant resolution) is version-sensitive
-on AD26 and we won't ship one we haven't bench-verified. The OutJob path above
-is the right place to emit the CSV — Altium already implements variant
-resolution, supplier-link resolution, and packaging-quantity logic there. The
-script consumes whatever Altium writes.
-
-If a project ships an `altium-emit-review-pack.PrjScr`-style emitter that
-produces a `bom.json` already, prefer that path.
+The OutJob path works, but has one persistent friction point: Altium embeds
+absolute output paths in every OutJob container, so in a team repo every
+developer has to re-link the containers after cloning. The `.pas` emitter
+derives its output path from the focused project at runtime, so it works
+correctly on any machine without manual re-linking.
